@@ -21,7 +21,7 @@
 
   const css = document.createElement("style");
   css.textContent = `
-    .chat { width:380px; height:420px; position:fixed; bottom:14px; left:14px;
+    .chat { width:340px; height:400px; position:fixed; bottom:14px; left:14px;
            background:#000; border-radius:10px; border:1px solid rgba(255,255,255,0.04);
            overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.6); }
     .iframe { width:100%; height:100%; border:0; display:block; }
