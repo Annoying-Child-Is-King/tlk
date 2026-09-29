@@ -76,10 +76,11 @@
 
     <div class="row controls">
       <div id="helpToggle" style="cursor:pointer;padding:6px;border-radius:6px;background:rgba(255,255,255,0.02);font-weight:700">?</div>
-      <div class="hint">CTRL+SHIFT+E toggle · ESC remove</div>
+      <div class="hint">CTRL+SHIFT+E toggle show/hide chat · ESC removes everything</div>
     </div>
 
     <div class="help" id="commands">
+CHAT COMMANDS:
 Bold = __Bold__
 Italic = _Italic_
 Code = &#96;code&#96;
