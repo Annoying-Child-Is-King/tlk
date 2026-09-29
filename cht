@@ -1,1 +1,259 @@
-var c=document.createElement("div");c.id="tlkio";c.style.cssText="width:400px;height:500px;position:fixed;bottom:0;left:0;z-index:9999";var i=document.createElement("iframe");var encoded="aHR0cHM6Ly9lbWJlZC50bGsuaW8vTW9pc3RCaXNjdWl0cz90aGVtZT10aGVtZS0tZGF5";i.src=atob(encoded);i.width="100%";i.height="100%";i.frameBorder="0";c.appendChild(i);document.body.appendChild(c);
+// === FINAL ISOLATED GUI (Shadow DOM) ===
+// Removes previous host if present, then injects a shadow-rooted UI so page CSS can't break it.
+(function(){
+  // remove old host if exists
+  const OLD = document.getElementById("tlkio-host");
+  if (OLD && OLD.parentNode) OLD.parentNode.removeChild(OLD);
+
+  // state
+  let autoHideEnabled = false;
+  let guiVisible = true;
+  let guiDestroyed = false;
+
+  // create host and shadow root
+  const host = document.createElement("div");
+  host.id = "tlkio-host";
+  host.style.all = "initial";
+  host.style.position = "fixed";
+  host.style.top = "0";
+  host.style.left = "0";
+  host.style.zIndex = "2147483647"; // max z-index to avoid being hidden
+  host.style.pointerEvents = "none"; // allow inner elements to control pointer-events
+  document.documentElement.appendChild(host);
+
+  const shadow = host.attachShadow({mode:"open"});
+
+  // inner container to allow pointer events
+  const wrapper = document.createElement("div");
+  wrapper.style.all = "initial";
+  wrapper.style.pointerEvents = "auto";
+  shadow.appendChild(wrapper);
+
+  // styles (isolated)
+  const style = document.createElement("style");
+  style.textContent = `
+    :host { font-family: Inter, Arial, sans-serif; }
+    .chat-container {
+      box-sizing: border-box;
+      width: 400px;
+      height: 500px;
+      position: fixed;
+      bottom: 12px;
+      left: 12px;
+      background: #000;
+      border: 2px solid rgba(0,0,0,0.45);
+      border-radius: 8px;
+      overflow: hidden;
+      opacity: 1;
+      min-width: 250px;
+      min-height: 180px;
+      display: block;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+    .chat-iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+    .gear-btn {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(180deg,#2a2a2a,#1f1f1f);
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+      font-size: 18px;
+      border: 1px solid rgba(255,255,255,0.03);
+      z-index: 9999999;
+    }
+    .settings {
+      position: fixed;
+      bottom: 64px;
+      right: 12px;
+      width: 260px;
+      background: linear-gradient(180deg,#0f1113,#151718);
+      color: #e6eef8;
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+      z-index: 9999999;
+      display: none;
+    }
+    .settings .title { font-weight:700; font-size:14px; color:#fff; }
+    .settings .close { cursor:pointer; color:#9fb0c8; font-size:16px; }
+    .settings label { color:#cfe6ff; font-size:13px; }
+    .settings .hint { color:#9fb0c8; font-size:11px; margin-top:10px; }
+    input[type="range"] { width:100%; margin-top:6px; }
+    input[type="checkbox"] { width:16px; height:16px; }
+  `;
+  wrapper.appendChild(style);
+
+  // chat container + iframe
+  const chatContainer = document.createElement("div");
+  chatContainer.className = "chat-container";
+  chatContainer.id = "tlkio";
+  const chatIframe = document.createElement("iframe");
+  const encoded = "aHR0cHM6Ly9lbWJlZC50bGsuaW8vTW9pc3RCaXNjdWl0cz90aGVtZT10aGVtZS0tZGF5";
+  chatIframe.src = atob(encoded);
+  chatIframe.className = "chat-iframe";
+  chatContainer.appendChild(chatIframe);
+  wrapper.appendChild(chatContainer);
+
+  // gear button
+  const gearBtn = document.createElement("div");
+  gearBtn.className = "gear-btn";
+  gearBtn.id = "chatGearBtn";
+  gearBtn.textContent = "⚙️";
+  wrapper.appendChild(gearBtn);
+
+  // settings panel
+  const settings = document.createElement("div");
+  settings.className = "settings";
+  settings.id = "chatSettings";
+  settings.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="title">Chat Settings</div>
+      <div class="close" id="closeSettings">✕</div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label for="chatOpacityRange">Chat Opacity</label>
+      <input id="chatOpacityRange" type="range" min="20" max="100" value="100">
+    </div>
+    <div style="margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="autoHideToggle">
+      <label for="autoHideToggle">Auto-hide on tab leave</label>
+    </div>
+    <div class="hint">Shortcut: <strong>CTRL + SHIFT + E</strong> to toggle all; <strong>ESC</strong> removes GUI.</div>
+  `;
+  wrapper.appendChild(settings);
+
+  // helper to get elements inside shadow
+  const $s = sel => shadow.querySelector(sel);
+
+  // ensure settings open reliably
+  const openSettings = () => {
+    if (guiDestroyed) return;
+    settings.style.display = "block";
+  };
+  const closeSettings = () => {
+    if (guiDestroyed) return;
+    settings.style.display = "none";
+  };
+
+  // gear click toggles settings
+  gearBtn.addEventListener("click", (ev) => {
+    if (guiDestroyed) return;
+    const cur = getComputedStyle(settings).display;
+    if (cur === "none") openSettings(); else closeSettings();
+    ev.stopPropagation();
+  });
+
+  // close button
+  $s("#closeSettings").addEventListener("click", (ev) => {
+    closeSettings();
+    ev.stopPropagation();
+  });
+
+  // click outside to close: use composedPath to handle shadow DOM
+  const onDocClick = (ev) => {
+    if (guiDestroyed) return;
+    const path = ev.composedPath ? ev.composedPath() : [];
+    if (!path.includes(settings) && !path.includes(gearBtn)) {
+      closeSettings();
+    }
+  };
+  document.addEventListener("click", onDocClick);
+
+  // opacity slider
+  const opacityRange = $s("#chatOpacityRange");
+  opacityRange.addEventListener("input", (e) => {
+    if (guiDestroyed) return;
+    const v = Number(e.target.value);
+    chatContainer.style.opacity = (v/100).toString();
+  });
+
+  // auto-hide toggle
+  const autoHideToggle = $s("#autoHideToggle");
+  autoHideToggle.addEventListener("change", (e) => {
+    if (guiDestroyed) return;
+    autoHideEnabled = !!e.target.checked;
+  });
+
+  // visibilitychange: auto-hide everything (chat + settings + gear)
+  const onVisibilityChange = () => {
+    if (guiDestroyed) return;
+    if (autoHideEnabled && document.visibilityState === "hidden") {
+      guiVisible = false;
+      chatContainer.style.display = "none";
+      settings.style.display = "none";
+      gearBtn.style.display = "none";
+    }
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+
+  // keyboard handlers: CTRL+SHIFT+E toggle everything; ESC destroy
+  const onKeyDown = (e) => {
+    if (guiDestroyed) return;
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "e") {
+      guiVisible = !guiVisible;
+      if (guiVisible) {
+        chatContainer.style.display = "block";
+        gearBtn.style.display = "flex";
+        // keep settings closed unless user had it open
+      } else {
+        chatContainer.style.display = "none";
+        settings.style.display = "none";
+        gearBtn.style.display = "none";
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      // destroy everything
+      destroy();
+    }
+  };
+  document.addEventListener("keydown", onKeyDown);
+
+  // ensure iframe always fills container (protect against page CSS)
+  const observer = new MutationObserver(() => {
+    if (guiDestroyed) return;
+    chatIframe.style.width = "100%";
+    chatIframe.style.height = "100%";
+  });
+  observer.observe(chatContainer, { attributes: true, attributeFilter: ["style"] });
+
+  // destroy function
+  function destroy(){
+    if (guiDestroyed) return;
+    guiDestroyed = true;
+    try {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+      observer.disconnect();
+    } catch(e){}
+    if (host && host.parentNode) host.parentNode.removeChild(host);
+  }
+
+  // initial sync: set slider to current opacity
+  try {
+    const initial = Math.round(parseFloat(getComputedStyle(chatContainer).opacity) * 100);
+    opacityRange.value = (isNaN(initial) ? 100 : initial).toString();
+  } catch(e) {
+    opacityRange.value = "100";
+  }
+
+  // expose destroy for debugging (optional)
+  host.__destroyGUI = destroy;
+
+})();
