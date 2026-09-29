@@ -1,4 +1,3 @@
-// Compact Shadow DOM chat GUI — more spacing, clearer commands, closable
 (function(){
   const OLD = document.getElementById("tlkio-host");
   if (OLD) OLD.remove();
@@ -83,12 +82,12 @@
     <div class="help" id="commands">
 Bold = __Bold__
 Italic = _Italic_
-Code = ` + " `code` " + `
+Code = &#96;code&#96;
 Strike = ~~Strike~~
-List = * Item
-Quote = > Quote
-HR = ---
-Link = [Title](link)
+List item = * Item
+Quote = &gt; Quote
+Horizontal rule = ---
+Link = [Title](https://example.com)
 Image = ![Title](image.png)
     </div>
   `;
